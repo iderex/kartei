@@ -13,10 +13,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # No `name:` on this job: the "Protect main" ruleset's required status check
-  # matches the literal check-run name, which defaults to the job id
-  # ("dependency-review") when no `name:` is set. Overriding it here would
-  # rename the check run and silently break the required-status-check gate.
+  # No `name:` on this job, so the check-run name is the job id,
+  # `dependency-review`. That string is the only thing a ruleset can match, so
+  # renaming the job renames the check, and a rule requiring the old name stops
+  # matching with nothing announcing it. Setting `name:` here is fine as long as
+  # the ruleset moves in the same change; leaving the two out of step is what is
+  # not.
+  #
+  # Whether anything requires this check is a property of the ruleset and not of
+  # this file, so this comment does not assert it either way. #6 owns that half
+  # and carries the command that reads the required list.
   dependency-review:
     runs-on: ubuntu-latest
     timeout-minutes: 10
