@@ -74,6 +74,21 @@ jobs:
           # does not prove the workspace compiles. The `build` leg of the gate is
           # what proves that, and this check is not a substitute for it.
           build-mode: none
+          # The default threat model treats network input as untrusted and
+          # nothing else. That is the wrong model for this product on one
+          # surface: an importer is a parser for a file somebody else wrote and
+          # aimed at the server deliberately, which is #71's own sentence, and a
+          # file the process reads is not trusted here because it arrived
+          # through the filesystem rather than through a socket. The same holds
+          # for the command line and the environment in a single binary an
+          # operator drives from a shell script.
+          #
+          # The cost is stated rather than discovered: this widens the source
+          # set, so it will report paths that a reader has to judge, and the
+          # gate below is what decides which of them stop a merge.
+          config: |
+            threat-models:
+              - local
 
       - name: Analyse
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
