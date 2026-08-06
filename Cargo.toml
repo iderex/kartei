@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/kartei-model",
+    "crates/kartei-sync",
+    "crates/kartei-store",
+    "crates/kartei-proto",
+    "crates/kartei-import",
+    "crates/kartei-server",
+]
+
+# Shared metadata, inherited by every member with `field.workspace = true`, so a
+# member cannot drift into a different licence or a different edition without the
+# drift being visible in one place.
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+repository = "https://github.com/iderex/kartei"
+publish = false

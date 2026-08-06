@@ -1,0 +1,15 @@
+[package]
+name = "kartei-store"
+description = "The embedded database, the schema, the migrations and the relational projection."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kartei-model = { path = "../kartei-model" }
+# The trait, never the engine. `kartei-sync` is depended on with its default
+# features, which do not include `engine`, so no engine type can reach this
+# crate through it.
+kartei-sync = { path = "../kartei-sync" }
