@@ -14,19 +14,19 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! The defect the `format` check names, and nothing else.
+//! The defect the `test` check names, and nothing else.
 //!
-//! `format` reports and does not rewrite. The defect it names is source that
-//! rustfmt would lay out differently, so the body below is indented eight
-//! spaces where rustfmt writes four. Nothing here is a compiler or clippy
-//! finding: indentation is not a lint, and the test passes.
+//! `test` runs the suite. The defect it names is a test that does not hold, so
+//! the assertion below is false at run time and true at compile time: nothing
+//! here warns, nothing here lints, and rustfmt has no objection. Only the leg
+//! that runs the code can see it.
 
-/// The number the test below expects, behind a call so no constant is folded.
-fn four() -> i32 {
-    4
+/// Adds two and two, behind a call so the comparison is made at run time.
+fn sum() -> i32 {
+    2 + 2
 }
 
 #[test]
-fn the_fixture_passes_and_is_misformatted() {
-        assert_eq!(four(), 4);
+fn the_fixture_fails_where_only_the_suite_can_see_it() {
+    assert_eq!(sum(), 5, "two and two are not five, which is the point");
 }
