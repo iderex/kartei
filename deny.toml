@@ -1,0 +1,116 @@
+# The dependency policy, over the whole tree rather than over a diff.
+#
+# `dependency-review` already runs on a pull request and reads what that pull
+# request adds. It cannot see a dependency that became vulnerable while nobody
+# touched it, and it says nothing about licences at all. This file is the other
+# half, and it judges every crate the workspace resolves to.
+#
+# The allowed set below is a function of the outbound licence and not a taste.
+# This repository is AGPL-3.0-only, so a dependency is allowed when its terms
+# can be combined into an AGPL-3.0 work and refused when they cannot. That
+# question has one right answer per licence, which is why the list is written
+# out rather than grown one crate at a time as things arrive.
+#
+# The list is written against an empty tree on purpose. Cargo.lock carries the
+# workspace crates and no third-party package today, so every dependency this
+# product ever gains is judged on the way in. A policy written after the tree
+# has filled up grandfathers whatever is already there, because the alternative
+# is a red gate on somebody else's change.
+
+[graph]
+# Judge what the workspace can resolve to, not what the default feature set
+# happens to reach. A dependency that only appears behind a feature is still a
+# dependency of the product the moment somebody enables it, and the licence
+# obligation arrives with it rather than with the release that turns it on.
+all-features = true
+
+[advisories]
+# Report unmaintained advisories for every crate in the graph, not only for the
+# ones this workspace declares directly. An unmaintained transitive dependency
+# is the same risk arriving through a longer path.
+#
+# Surfaced rather than blocked, which is the lint level the run passes rather
+# than a setting here. Unmaintained is a judgement about a project's future and
+# the right response is a recorded triage, not an automatic refusal. Vulnerable
+# is a judgement about its present and does refuse.
+unmaintained = "all"
+
+# Advisories are refused, and an exception is an entry here carrying the reason
+# it was made. Empty because none has been needed.
+ignore = []
+
+[licenses]
+# Allowed inbound, derived from AGPL-3.0-only outbound.
+#
+# The permissive terms first. Each of these permits the combined work to be
+# distributed under stronger terms, so an AGPL-3.0 release carries them without
+# conflict.
+#
+# Then the copyleft terms that can be taken up to AGPL-3.0. GPL-3.0 and
+# LGPL-3.0 combine with AGPL-3.0 directly. The `-or-later` forms of the older
+# licences are allowed because the "or later" clause is what permits the code to
+# be used under version 3, and that clause is the whole of the difference. Their
+# `-only` forms are absent from this list for exactly that reason, and their
+# absence is the refusal.
+allow = [
+    "0BSD",
+    "AGPL-3.0-only",
+    "AGPL-3.0-or-later",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "GPL-2.0-or-later",
+    "GPL-3.0-only",
+    "GPL-3.0-or-later",
+    "ISC",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0-only",
+    "LGPL-3.0-or-later",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+# An entry above that no crate uses is the expected state here, not a finding.
+# The list is derived from the outbound licence rather than from the tree, so
+# most of it is unused today and would stay unused on a small tree. Left at the
+# default this would print a note for every unused entry on every run, which
+# teaches a reader to skim the output of a check whose whole value is that its
+# output is read.
+unused-allowed-license = "allow"
+
+# A licence allowed for one named crate rather than for everything. Each entry
+# would carry the crate it applies to, and the reason belongs in a comment on
+# the line. Empty because none has been needed.
+exceptions = []
+
+[licenses.private]
+# The workspace's own crates are judged too. They are all `publish = false`, so
+# ignoring them would be defensible and would also make this check vacuous on
+# the tree as it stands: with no third-party package resolved, those crates are
+# the only subject the licence leg has. Judging them means the leg passes today
+# by refusing nothing rather than by having nothing to look at, and it means a
+# member that drifts to a different licence is refused here.
+ignore = false
+
+[bans]
+# Two versions of one crate in one build is two copies of its code, two sets of
+# its bugs and two advisory surfaces, and it arrives quietly through a
+# transitive dependency rather than through anybody's decision.
+#
+# This is stricter than a rule about major versions alone, because the tool
+# refuses any duplicate rather than only a semver-incompatible one. That is a
+# deliberate over-reach at the point where the tree has no dependencies and so
+# no duplicates to grandfather. The escape is an entry in `skip` below carrying
+# the reason it could not be resolved, which is a decision somebody makes and
+# writes down rather than a default nobody sees.
+multiple-versions = "deny"
+
+# Duplicates that were looked at and could not be removed. Each entry carries
+# the reason on its own line. Empty because there are none.
+skip = []
