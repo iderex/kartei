@@ -1,0 +1,140 @@
+# Source analysis of the server, with CodeQL.
+#
+# The workflow auditor in `.github/workflows/zizmor.yml` judges the workflow
+# files. This one judges the code they build, which is the other half and the
+# larger one. `docs/gate.md` carries the target this belongs to and fixes the
+# check-run name below; a ruleset can match only a literal name, so the `name:`
+# on the job is the interface and renaming it silently stops the rule matching.
+#
+# Two conditions decide the shape of everything under `jobs:`, and both are
+# learned rather than chosen.
+#
+# The analysis has to produce a result on a pull request from a fork. A fork's
+# token cannot write security events, so a check whose verdict comes from the
+# code-scanning service after an upload has no verdict at all there, and a check
+# that cannot be produced by an outside contribution can never be required
+# without closing the repository to outside contributions. That is
+# `iderex/jellyfin-plugin-sso#1210`. So the analysis is what gates, from the
+# SARIF file on the runner, and the upload is a separate step that is allowed to
+# be skipped and allowed to fail.
+#
+# The upload comes before the gate on purpose. A run that finds something has to
+# leave that finding in the code-scanning tab where it can be triaged, and a
+# gate step ahead of the upload would end the job first and throw the finding
+# away.
+name: Static analysis
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+
+# Deny by default at the workflow level; the job grants only what it needs.
+permissions: {}
+
+# A newer push on the same ref supersedes an in-flight run. This job only
+# judges and uploads a report, so cancelling a superseded run is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    # The source gate's name with only the language changed, so the
+    # correspondence to the check it replaces is readable without a table.
+    name: Analyze (rust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Only reachable on a same-repository event; a fork's token is read-only
+      # whatever is written here, which is why nothing below depends on it.
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not leave the token in .git/config.
+          persist-credentials: false
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: rust
+          # The workspace is built the way the gate builds it, with the
+          # compiler `rust-toolchain.toml` names, so the analysis sees the same
+          # code the other checks judge.
+          build-mode: autobuild
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: /language:rust
+          output: sarif-results
+          # The verdict is taken from the file below rather than from the
+          # service, for the reason in this file's header.
+          upload: never
+
+      - name: Upload the results where the token can write them
+        # Same-repository pull requests and pushes to main only. A fork's
+        # pull request and a Dependabot pull request run with a read-only
+        # token, so the upload is skipped there and the gate below still runs.
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+          || (github.event.pull_request.head.repo.full_name == github.repository
+              && github.event.pull_request.user.login != 'dependabot[bot]')
+        # The upload is a report, not the verdict. A code-scanning outage must
+        # not be able to skip the gate step, and it must not be able to fail a
+        # pull request either.
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          sarif_file: sarif-results
+          category: /language:rust
+
+      - name: Fail on a finding at error level
+        # The chosen severity is `error`, which is what the default query suite
+        # marks a security problem it is confident about. `warning` and `note`
+        # are uploaded and triaged and do not gate, because a gate that reds on
+        # an advisory finding teaches people to stop reading it.
+        #
+        # Fail closed in three directions. No SARIF file means the analysis did
+        # not produce one, which is not the same as finding nothing. A result
+        # whose rule is not in the run's rule list is counted as an error rather
+        # than skipped, so an unrecognised shape cannot pass by being
+        # unreadable. And the walk is guarded, so a jq failure reds the job.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(sarif-results/*.sarif)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::the analysis produced no SARIF file, so there is no result to read."
+            exit 1
+          fi
+          echo "Reading ${#files[@]} SARIF file(s): ${files[*]}"
+          if ! findings=$(jq -r '
+            [ .runs[]
+              | (.tool.driver.rules // []) as $rules
+              | (.results // [])[]
+              | . as $r
+              | ($rules | map(select(.id == $r.ruleId)) | first) as $rule
+              | { level: ($r.level // $rule.defaultConfiguration.level // "error"),
+                  id: ($r.ruleId // "unknown"),
+                  where: (($r.locations // [])[0].physicalLocation.artifactLocation.uri // "?"),
+                  line: (($r.locations // [])[0].physicalLocation.region.startLine // 0),
+                  what: ($r.message.text // "") }
+            ]
+            | (map(select(.level == "error")) | .[] | "error \(.id) \(.where):\(.line) \(.what)")
+          ' "${files[@]}"); then
+            echo "::error::could not read the SARIF, so the analysis has no readable verdict."
+            exit 1
+          fi
+          if [ -n "$findings" ]; then
+            echo "$findings"
+            count=$(printf '%s\n' "$findings" | wc -l)
+            echo "::error::${count} finding(s) at error level."
+            exit 1
+          fi
+          total=$(jq -s -r '[.[].runs[] | (.results // []) | length] | add // 0' "${files[@]}")
+          echo "No finding at error level. The analysis reported ${total} result(s) in total, at warning or note."
