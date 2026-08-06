@@ -62,10 +62,18 @@ jobs:
         uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           languages: rust
-          # The workspace is built the way the gate builds it, with the
-          # compiler `rust-toolchain.toml` names, so the analysis sees the same
-          # code the other checks judge.
-          build-mode: autobuild
+          # The only mode this extractor accepts. It refuses `autobuild` by
+          # name, so this is a fact about the tool rather than a choice:
+          #
+          #     A fatal error occurred: Rust does not support the autobuild
+          #     build mode. Please try using one of the following build modes
+          #     instead: none.
+          #
+          # It reads the sources rather than a compilation, which means the
+          # analysis does not need the toolchain `rust-toolchain.toml` names and
+          # does not prove the workspace compiles. The `build` leg of the gate is
+          # what proves that, and this check is not a substitute for it.
+          build-mode: none
 
       - name: Analyse
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
