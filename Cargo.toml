@@ -7,6 +7,7 @@ members = [
     "crates/kartei-proto",
     "crates/kartei-import",
     "crates/kartei-server",
+    "crates/kartei-testing",
 ]
 
 # Shared metadata, inherited by every member with `field.workspace = true`, so a

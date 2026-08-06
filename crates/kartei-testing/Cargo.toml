@@ -1,0 +1,34 @@
+[package]
+name = "kartei-testing"
+description = "The test harness: per-test temporary directories, ephemeral ports, and the conditions every suite in this workspace is held to."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# No dependencies. A harness crate that pulled one in would put it in the
+# dependency graph of every suite in the workspace, and the two platform
+# queries this crate needs are two function declarations rather than a crate.
+[dependencies]
+
+[features]
+# Enables the GPU suite below. Empty on purpose: the feature exists to keep that
+# suite out of `cargo test --workspace`, not to switch code on.
+gpu = []
+
+[[test]]
+name = "gpu"
+path = "tests/gpu.rs"
+# The GPU suite is not part of the gate, and this line is what makes that true
+# rather than a convention somebody remembers. `cargo test --workspace` does not
+# enable the feature, so this target is not built and not run there. Running it
+# is deliberate and explicit:
+#
+#     cargo test -p kartei-testing --features gpu --test gpu
+#
+# The cost of keeping it out this way is that the gate does not compile it
+# either, so it can rot without anything saying so. That is stated here rather
+# than mitigated, because the alternative costs more: a target the gate compiles
+# is a target somebody will eventually make the gate run.
+required-features = ["gpu"]
