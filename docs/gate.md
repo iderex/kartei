@@ -80,8 +80,17 @@ being aspirational:
 gh api repos/github/codeql/contents/rust --jq 'length'
 ```
 
-Owed by #53, which also owns the condition that it produce a result on a pull
-request from a fork.
+In the tree, in `.github/workflows/codeql.yml`. The condition that it produce a
+result on a pull request from a fork is what shaped it: the verdict is taken from
+the SARIF file on the runner and the upload to code scanning is a separate step
+that may be skipped and may fail, because a fork's token cannot write security
+events and a check an outside contribution cannot produce can never be required.
+
+That upload has a consequence for the comparison this document does not make.
+When it runs, the code-scanning service publishes a check run of its own named
+`CodeQL`, which is not a job in this repository and is absent on a pull request
+from a fork. It is deliberately not in the target above, and the reason it must
+stay out is written into #57 with the command that shows it.
 
 `DCO sign-off` is kept exactly. In the tree, in `.github/workflows/dco.yml`.
 
