@@ -1,4 +1,4 @@
-# The gate: four checks that judge the code, each reported under its own name.
+# The gate: five checks that judge the code, each reported under its own name.
 #
 # A ruleset can only require a check by its literal check-run name, so the names
 # are the interface and are chosen here rather than inherited from whatever the
@@ -6,20 +6,28 @@
 # `name:`, which fixes the check-run name; renaming a job silently stops it being
 # required and nothing announces that, so the name is treated as a promise.
 #
-# Four jobs rather than one job with four steps. A single job reports one result,
-# so a reader of the required-checks list cannot tell which leg failed, and a leg
-# that stops being run cannot stop being green on its own.
+# One job per leg rather than one job with several steps. A single job reports
+# one result, so a reader of the required-checks list cannot tell which leg
+# failed, and a leg that stops being run cannot stop being green on its own.
 #
-# The names are lowercase and say what they are: build, test, format, lint. The
-# first keeps the name the gate this one is measured against already uses, and
-# the tree already carries `dependency-review` in the same style.
+# The names are lowercase and say what they are: build, test, format, lint,
+# msrv. The first keeps the name the gate this one is measured against already
+# uses, and the tree already carries `dependency-review` in the same style.
+#
+# `msrv` is named for the thing rather than for the number. Putting the version
+# in the check-run name would mean that raising the floor renames the check, and
+# a ruleset requiring the old name would stop matching with nothing announcing
+# it, which is the failure the paragraph above is about.
 #
 # Every job runs on `pull_request` for every branch and needs nothing but
 # `contents: read`, so a pull request from a fork produces the same result as one
 # from a branch here. A check that cannot run on a fork's pull request is not a
 # gating check.
 #
-# The toolchain is the one the runner image ships. Pinning it is its own change.
+# The toolchain is `rust-toolchain.toml`, which rustup reads before any command
+# below runs, so every job here compiles with the compiler the repository names
+# and not the one the runner image happens to ship. The `msrv` job is the one
+# exception, and it overrides it deliberately.
 name: Gate
 
 on:
@@ -104,3 +112,58 @@ jobs:
           persist-credentials: false
       - name: Lint with warnings denied
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the floor out of the workspace manifest
+        id: floor
+        # Read, never restated. The floor lives in one place, `rust-version` in
+        # `[workspace.package]`, and every member inherits it. A number typed
+        # here as well would be a second copy that drifts, and the drift would
+        # show up as a green gate against a floor nobody supports any more.
+        #
+        # Fail closed in three directions. A member that does not inherit shows
+        # up as `null`, two members that disagree show up as two values, and an
+        # empty answer means the query itself stopped working. None of those may
+        # be read as "the floor is fine".
+        run: |
+          set -euo pipefail
+          floors=$(cargo metadata --no-deps --locked --format-version 1 \
+            | jq -r '[.packages[].rust_version] | unique | .[]')
+          if [ -z "$floors" ]; then
+            echo "::error::no package reported a rust-version, so there is no floor to build against."
+            exit 1
+          fi
+          if [ "$(printf '%s\n' "$floors" | wc -l)" -ne 1 ]; then
+            echo "::error::the workspace states more than one floor, so no single toolchain answers for it: $(printf '%s' "$floors" | tr '\n' ' ')"
+            exit 1
+          fi
+          if [ "$floors" = "null" ]; then
+            echo "::error::a package does not inherit rust-version, so the floor is not stated for the whole workspace."
+            exit 1
+          fi
+          echo "Floor read from the manifest: $floors"
+          echo "floor=$floors" >> "$GITHUB_OUTPUT"
+      - name: Install the floor toolchain
+        # Through the environment rather than interpolated into the script, so a
+        # value that reached the manifest could never be evaluated as shell.
+        env:
+          FLOOR: ${{ steps.floor.outputs.floor }}
+        run: rustup toolchain install "$FLOOR" --profile minimal --no-self-update
+      - name: Build the workspace with the floor toolchain
+        # The same flags the build leg uses, with the floor selected explicitly.
+        # A language feature that needs something newer reds here, which is the
+        # point: raising the floor becomes a change somebody makes on purpose.
+        env:
+          FLOOR: ${{ steps.floor.outputs.floor }}
+          RUSTFLAGS: "-D warnings"
+        run: cargo "+$FLOOR" build --workspace --locked --all-targets

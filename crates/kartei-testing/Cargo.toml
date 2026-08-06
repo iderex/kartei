@@ -3,6 +3,7 @@ name = "kartei-testing"
 description = "The test harness: per-test temporary directories, ephemeral ports, and the conditions every suite in this workspace is held to."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true

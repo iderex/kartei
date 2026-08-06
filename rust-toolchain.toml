@@ -1,0 +1,25 @@
+# The compiler, for the gate and for a contributor, in one file.
+#
+# A build that resolves its own toolchain at build time proves something about
+# the moment it ran rather than about the commit it ran on. Rustup reads this
+# file, so `cargo build` here and `cargo build` in the gate are the same
+# compiler, and a formatting or lint result stops moving when a runner image
+# moves.
+#
+# An exact patch version rather than `stable`. `stable` is a moving target, and
+# the two checks that would notice first are the two whose output is opinion:
+# rustfmt reflows differently between releases and clippy gains lints, so a
+# green branch reds on a day nobody touched it.
+#
+# Raising this is a deliberate change with its own reason, and it is not the same
+# change as raising the floor. The floor is `rust-version` in the workspace
+# manifest, which is what the `msrv` job in the gate reads and builds with.
+#
+# The browser client has nothing here to pin. There is no manifest and no
+# lockfile under `web/` yet, only the note recording where the client will live,
+# so the fourth thing #5 asks to pin has no subject in the tree today. It is
+# owed once the first client change lands, and it is not covered by this file.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

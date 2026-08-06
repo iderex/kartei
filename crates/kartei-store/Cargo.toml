@@ -3,6 +3,7 @@ name = "kartei-store"
 description = "The embedded database, the schema, the migrations and the relational projection."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
