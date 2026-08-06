@@ -14,20 +14,19 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! The defect the `lint` check names, and nothing else.
+//! The defect the `format` check names, and nothing else.
 //!
-//! `lint` runs clippy with warnings denied. The defect it names is a lint the
-//! compiler does not have, so the file carries a `return` on the last
-//! expression of a function: `clippy::needless_return` is warn by default and
-//! rustc says nothing about it. The function is called, so it is not dead code,
-//! and the file compiles, formats and passes.
+//! `format` reports and does not rewrite. The defect it names is source that
+//! rustfmt would lay out differently, so the body below is indented eight
+//! spaces where rustfmt writes four. Nothing here is a compiler or clippy
+//! finding: indentation is not a lint, and the test passes.
 
-/// Upper-cases a word, and returns it the one way clippy objects to.
-fn shout(word: &str) -> String {
-    return word.to_uppercase();
+/// The number the test below expects, behind a call so no constant is folded.
+fn four() -> i32 {
+    4
 }
 
 #[test]
-fn the_fixture_passes_and_is_linted() {
-    assert_eq!(shout("gate"), "GATE");
+fn the_fixture_passes_and_is_misformatted() {
+        assert_eq!(four(), 4);
 }
