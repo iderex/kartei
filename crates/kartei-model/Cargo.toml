@@ -1,0 +1,12 @@
+[package]
+name = "kartei-model"
+description = "The block schema and the field schema as plain data."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# No dependencies, and that is the point of the crate rather than an accident of
+# it being empty. See the boundary test in crates/kartei-server/tests.
+[dependencies]

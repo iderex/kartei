@@ -1,0 +1,13 @@
+[package]
+name = "kartei-import"
+description = "The importers, which read files and produce model data."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The model only. An importer that could reach storage or sync would be able to
+# write a document the projection never sees.
+kartei-model = { path = "../kartei-model" }

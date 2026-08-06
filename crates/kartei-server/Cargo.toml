@@ -1,0 +1,18 @@
+[package]
+name = "kartei-server"
+description = "The binary: HTTP, sockets, configuration, assembly."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kartei-import = { path = "../kartei-import" }
+kartei-model = { path = "../kartei-model" }
+kartei-proto = { path = "../kartei-proto" }
+kartei-store = { path = "../kartei-store" }
+# The binary is where an engine is selected, by enabling the feature on the one
+# crate allowed to carry one. The feature is empty until the engine decision is
+# recorded, so it is not enabled here yet.
+kartei-sync = { path = "../kartei-sync" }

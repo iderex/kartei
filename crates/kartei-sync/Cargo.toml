@@ -1,0 +1,20 @@
+[package]
+name = "kartei-sync"
+description = "The replicated document trait, the version and update types, and the one place an engine is named."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# The default build carries the trait and no engine, so a crate above the
+# boundary cannot reach an engine type even by accident.
+default = []
+# The slot an engine implementation goes in. It is empty today: which engine
+# this is remains open on the tracker, and naming one here would settle it in
+# the wrong place. When it is settled, the engine crate becomes an optional
+# dependency enabled by this feature and by nothing else.
+engine = []
+
+[dependencies]

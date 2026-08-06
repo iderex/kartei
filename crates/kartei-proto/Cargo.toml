@@ -1,0 +1,12 @@
+[package]
+name = "kartei-proto"
+description = "The wire messages and their versioning."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# No dependencies. The wire format is a format, not a view of the engine, so it
+# is defined without reference to one.
+[dependencies]
