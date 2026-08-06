@@ -26,6 +26,7 @@ dependencies = [
  "kartei-proto",
  "kartei-store",
  "kartei-sync",
+ "kartei-testing",
 ]
 
 [[package]]

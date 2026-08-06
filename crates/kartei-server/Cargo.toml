@@ -3,6 +3,7 @@ name = "kartei-server"
 description = "The binary: HTTP, sockets, configuration, assembly."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
@@ -16,3 +17,9 @@ kartei-store = { path = "../kartei-store" }
 # crate allowed to carry one. The feature is empty until the engine decision is
 # recorded, so it is not enabled here yet.
 kartei-sync = { path = "../kartei-sync" }
+
+# The harness, for the tests only. A normal dependency on it would put it in the
+# binary, which is the one thing the harness must never be in, and a test in
+# kartei-testing refuses that crossing.
+[dev-dependencies]
+kartei-testing = { path = "../kartei-testing" }

@@ -16,6 +16,14 @@ members = [
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
+# The floor, stated once and inherited. It is derived rather than picked: 1.85.0
+# is the first release that carries edition 2024, which the line above declares,
+# so the oldest compiler that could ever build this workspace is the oldest one
+# it claims to support. Cargo refuses an older toolchain by itself, and the
+# `msrv` job in the gate builds the whole workspace with exactly this version so
+# the claim is exercised rather than asserted. Raising it is a deliberate edit
+# here, not something that happens when somebody uses a newer language feature.
+rust-version = "1.85.0"
 license = "AGPL-3.0-only"
 repository = "https://github.com/iderex/kartei"
 publish = false

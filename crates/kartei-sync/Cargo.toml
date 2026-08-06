@@ -3,6 +3,7 @@ name = "kartei-sync"
 description = "The replicated document trait, the version and update types, and the one place an engine is named."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
