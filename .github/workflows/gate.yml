@@ -1,0 +1,106 @@
+# The gate: four checks that judge the code, each reported under its own name.
+#
+# A ruleset can only require a check by its literal check-run name, so the names
+# are the interface and are chosen here rather than inherited from whatever the
+# job or the file happens to be called. Every job below carries an explicit
+# `name:`, which fixes the check-run name; renaming a job silently stops it being
+# required and nothing announces that, so the name is treated as a promise.
+#
+# Four jobs rather than one job with four steps. A single job reports one result,
+# so a reader of the required-checks list cannot tell which leg failed, and a leg
+# that stops being run cannot stop being green on its own.
+#
+# The names are lowercase and say what they are: build, test, format, lint. The
+# first keeps the name the gate this one is measured against already uses, and
+# the tree already carries `dependency-review` in the same style.
+#
+# Every job runs on `pull_request` for every branch and needs nothing but
+# `contents: read`, so a pull request from a fork produces the same result as one
+# from a branch here. A check that cannot run on a fork's pull request is not a
+# gating check.
+#
+# The toolchain is the one the runner image ships. Pinning it is its own change.
+name: Gate
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+
+# Deny by default at the workflow level; each job grants only what it needs.
+permissions: {}
+
+# A newer push on the same ref supersedes an in-flight run. These jobs only
+# judge, they publish nothing, so cancelling a superseded run is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not leave the token in .git/config.
+          persist-credentials: false
+      - name: Build the workspace with warnings denied
+        # --locked so the committed lockfile is the thing that is built, and a
+        # dependency added without updating it reds here rather than resolving
+        # to something nobody reviewed. --all-targets so tests and examples are
+        # compiled too, not only the library and the binary.
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo build --workspace --locked --all-targets
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run the suite
+        # Separate from build on purpose: a green build must not be readable as
+        # a green suite.
+        run: cargo test --workspace --locked
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check formatting
+        # --check reports and fails; it does not rewrite. A gate that reformats
+        # would hide the thing it is meant to report.
+        run: cargo fmt --all --check
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint with warnings denied
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
