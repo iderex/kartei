@@ -192,7 +192,8 @@ three target entries that no issue below the milestone parent owes:
 `prettier`. The search that found the gap is
 
 ```
-gh api "search/issues?q=repo:iderex/kartei+prettier+in:title,body" --jq '[.items[].number]'
+gh api "search/issues?q=repo:iderex/kartei+is:issue+prettier+in:title,body" \
+  --jq '[.items[].number]'
 ```
 
 and it returns only #50 and #51, which are this milestone and this document.
