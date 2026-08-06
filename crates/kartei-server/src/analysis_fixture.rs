@@ -17,16 +17,21 @@
 //! A defect on purpose, so the analysis check can be watched failing before
 //! anybody is asked to trust it.
 //!
-//! This file exists for one commit. The commit after it removes the file and
-//! the call below, and the two runs are what the pull request records: red with
-//! this here, green with it gone, so the failure is attributable to the defect
-//! rather than to the check having been wired up wrong.
+//! This is the second of three states this file passes through, and the pull
+//! request records the run for each. The first had no containment at all. This
+//! one has containment written the way somebody actually writes it wrong. The
+//! third has it right, and the file is then removed.
 //!
-//! The defect is the one somebody actually writes. A name arrives from outside
-//! the process, it is joined onto a directory the program owns, and the result
-//! is opened. Joining looks like it confines the read to that directory and it
-//! does not: a name holding `..` walks out of it, and on this path a name is
-//! whatever the caller passed.
+//! The mistake here is the order of two lines and nothing else. The path is
+//! checked against the directory it is supposed to stay inside, and then it is
+//! resolved. That is backwards. `..` is still a literal component when the
+//! check runs, so a name walking out of the directory still passes a check that
+//! compares the front of the string, and the resolution afterwards is what
+//! turns it into the path that is actually opened.
+//!
+//! Swapping the two lines is the whole repair, which is why this is the version
+//! worth running the check against: an obviously broken input proves the check
+//! is wired up, and this one proves it can tell the difference that matters.
 
 use std::path::PathBuf;
 
@@ -36,6 +41,15 @@ const DATA_DIRECTORY: &str = "/var/lib/kartei";
 /// Read a file the caller named, from inside the data directory.
 pub fn read_from_the_data_directory() -> std::io::Result<Vec<u8>> {
     let name = std::env::args().nth(1).unwrap_or_default();
-    let path = PathBuf::from(DATA_DIRECTORY).join(name);
+    let base = PathBuf::from(DATA_DIRECTORY);
+    let path = base.join(name);
+
+    // Too early. Nothing has resolved `..` yet, so this compares the front of a
+    // string that is not the path the next line opens.
+    if !path.starts_with(&base) {
+        return Err(std::io::Error::other("outside the data directory"));
+    }
+
+    let path = path.canonicalize()?;
     std::fs::read(path)
 }
