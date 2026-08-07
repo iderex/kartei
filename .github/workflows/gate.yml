@@ -81,7 +81,62 @@ jobs:
       - name: Run the suite
         # Separate from build on purpose: a green build must not be readable as
         # a green suite.
-        run: cargo test --workspace --locked
+        run: |
+          set -euo pipefail
+          cargo test --workspace --locked 2>&1 | tee suite.log
+      - name: Say what the run covered
+        # Disclosure, and it refuses nothing. `cargo test --workspace` runs the
+        # test targets it can build and prints nothing about the ones it did
+        # not, so a workspace that holds a suite back behind a feature produces
+        # exactly the log of one that has no such suite. That case is already
+        # live here: `kartei-testing`'s GPU target carries `required-features`
+        # and is deliberately out of the gate, and until this step the log gave
+        # a reader no way to see it.
+        #
+        # The declaration and the run are read from the same manifests, so this
+        # cannot see a target that left the manifest altogether: a member
+        # dropped from the workspace, or a target switched off with
+        # `test = false`, disappears from both sides at once. What it makes
+        # readable is the gap between what the tree declares and what this run
+        # executed, which is the shape a feature gate produces.
+        run: |
+          set -euo pipefail
+          cargo metadata --no-deps --locked --format-version 1 \
+            | jq -r '.packages[]
+                     | .name as $p
+                     | .targets[]
+                     | select(.test)
+                     | [$p, .name, ((.["required-features"] // []) | join(","))]
+                     | @tsv' \
+            | sort > declared.tsv
+          ran=0
+          held=0
+          absent=0
+          while IFS=$(printf '\t') read -r package target features; do
+            # The binary a target builds carries the target name with hyphens
+            # turned into underscores, which is what the log's Running line
+            # shows.
+            binary=${target//-/_}
+            if grep -q "deps/${binary}-" suite.log; then
+              echo "ran        ${package} ${target}"
+              ran=$((ran + 1))
+            elif [ -n "${features}" ]; then
+              echo "held out   ${package} ${target}, requires feature: ${features}"
+              held=$((held + 1))
+            else
+              echo "not run    ${package} ${target}"
+              absent=$((absent + 1))
+            fi
+          done < declared.tsv
+          # `|| true` on each grep because no match is a count of zero here and
+          # not a failure, and `pipefail` would otherwise end the step on the
+          # day the suite reports neither.
+          ignored=$( { grep -o '[0-9]* ignored' suite.log || true; } | cut -d' ' -f1 \
+            | awk '{ total += $1 } END { print total + 0 }')
+          filtered=$( { grep -o '[0-9]* filtered out' suite.log || true; } | cut -d' ' -f1 \
+            | awk '{ total += $1 } END { print total + 0 }')
+          echo "${ran} declared test target(s) ran, ${held} held out behind a feature, ${absent} neither."
+          echo "${ignored} test(s) ignored and ${filtered} filtered out across the run."
 
   format:
     name: format
