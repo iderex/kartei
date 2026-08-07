@@ -1,0 +1,94 @@
+# The dependency policy over the whole tree, and the proof that it refuses.
+#
+# `dependency-review` reads the diff of a pull request. It is kept, it is not
+# replaced here, and it cannot answer either of the two questions this job
+# exists for: what licence every crate in the resolved graph carries, and
+# whether a crate nobody touched has since had an advisory published against it.
+# Both are properties of the whole tree rather than of a change.
+#
+# Its own file rather than a job inside the gate workflow, because the schedule
+# below applies to this check and to no other. Adding a schedule to the gate
+# would run five other jobs on it for no reason, and a job that judges the tree
+# on its own can red on a day when nothing about the tree changed, which is not
+# a thing the gate's other legs can do.
+#
+# The check-run name is `dependency-policy`, set by the explicit `name:` on the
+# job below. A ruleset can only require a check by that literal string, so the
+# name is a promise: renaming the job stops a rule matching it and nothing
+# announces that.
+name: Dependency policy
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main]
+  # A dependency that becomes vulnerable while nobody touches it is invisible to
+  # anything that only runs on a change, and that is most of how this failure
+  # arrives. Weekly rather than daily: an advisory that lands on a Tuesday is
+  # worth finding, and the cost of finding it six days later is smaller than the
+  # cost of a job whose output nobody reads any more.
+  #
+  # A red here is visible in this repository's workflow run list and nowhere
+  # else. It attaches to no pull request, it opens no issue, and nothing
+  # notifies. That is the state, not the intention, and it is what the operator
+  # of this repository is relying on until something is built to carry it.
+  schedule:
+    - cron: "17 4 * * 1"
+
+# Deny by default at the workflow level; the job grants only what it needs.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-policy:
+    name: dependency-policy
+    runs-on: ubuntu-latest
+    # Generous because the checker is built from source below rather than
+    # downloaded, so a cold run pays for a compile. The check itself is seconds.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not leave the token in .git/config.
+          persist-credentials: false
+
+      - name: Install the checker
+        # An exact version rather than the latest one, for the reason
+        # `rust-toolchain.toml` pins the compiler: a checker that moves on its
+        # own turns a green branch red on a day nobody touched it, and the two
+        # things most likely to move here are a new lint and a changed default.
+        # Raising this is a deliberate edit with its own reason.
+        #
+        # Built from crates.io rather than fetched through a third-party action.
+        # It adds no party to trust that this repository does not already trust
+        # for the code it compiles, and `--locked` means the checker is built
+        # from the dependency versions its own authors released it against.
+        run: cargo install --locked cargo-deny@0.18.6
+
+      - name: Judge the whole dependency graph
+        # `--locked` so the committed lockfile is what is judged, and a graph
+        # that only resolves this way today reds here rather than being read as
+        # the graph the policy passed.
+        #
+        # `--warn unmaintained` is the one lint level set on the command rather
+        # than in the file. Unmaintained is a judgement about a project's future
+        # and the answer to it is a recorded triage, not an automatic refusal.
+        # Vulnerable is a judgement about its present, and that one refuses.
+        run: cargo deny --locked check --warn unmaintained licenses bans advisories
+
+      - name: Watch the policy refuse
+        # The demonstration runs beside the check rather than somewhere a reader
+        # has to go and find. Three fixture workspaces, written by the suite
+        # itself, judged by the same `deny.toml` the step above used: one the
+        # policy accepts, one differing from it only by the `-or-later` clause
+        # on a licence, and one differing only by carrying a second version of
+        # one crate. A green report from the step above means something because
+        # this step is green too.
+        run: cargo test -p kartei-server --features policy --test dependency_policy

@@ -23,3 +23,28 @@ kartei-sync = { path = "../kartei-sync" }
 # kartei-testing refuses that crossing.
 [dev-dependencies]
 kartei-testing = { path = "../kartei-testing" }
+
+[features]
+# Enables the dependency policy suite below. Empty on purpose: the feature
+# exists to keep that suite out of `cargo test --workspace`, not to switch code
+# on.
+policy = []
+
+[[test]]
+name = "dependency_policy"
+path = "tests/dependency_policy.rs"
+# The suite runs `cargo deny` against fixture workspaces, so it needs a binary
+# the rest of this workspace does not, and a contributor who has not installed
+# it should not be told their suite is broken. `cargo test --workspace` does not
+# enable the feature, so this target is not built there. Running it is
+# deliberate and explicit:
+#
+#     cargo install --locked cargo-deny
+#     cargo test -p kartei-server --features policy --test dependency_policy
+#
+# The GPU suite is kept out of the gate the same way and pays for it by not
+# being compiled anywhere, so it can rot unreported. This target does not pay
+# that cost: the `dependency-policy` job runs exactly the command above next to
+# the real check, so the check that refuses a dependency demonstrates that it
+# can refuse one every time it runs.
+required-features = ["policy"]
