@@ -17,5 +17,33 @@ default = []
 # the wrong place. When it is settled, the engine crate becomes an optional
 # dependency enabled by this feature and by nothing else.
 engine = []
+# The three candidate engines, side by side, for the comparison in
+# `docs/decisions/0002-sync-engine.md` and for nothing else. They are optional
+# and reached only by the bench target below, which declares them as
+# `required-features`, so the default build of this crate and every build the
+# gate makes carries none of them. `cargo build --workspace --all-targets` skips
+# a target whose required features are off, which is how the GPU suite in
+# `kartei-testing` is already kept out of the gate.
+#
+# This is not the `engine` slot above and must not become it. That slot takes
+# one engine, named once, when #12 settles which. This one takes all three
+# because a comparison that drops a candidate stops being a comparison.
+measure = ["dep:automerge", "dep:loro", "dep:yrs"]
 
 [dependencies]
+# Exact versions rather than ranges. A comparison whose numbers move when a
+# patch release lands is a comparison nobody can reproduce, and the table in the
+# decision record quotes these versions beside every measured cell.
+automerge = { version = "=0.6.1", optional = true }
+loro = { version = "=1.13.9", optional = true }
+yrs = { version = "=0.23.5", optional = true }
+
+[[bench]]
+name = "engine_comparison"
+path = "benches/engine_comparison.rs"
+# No libtest harness: this target is a program that prints measurements, not a
+# suite that passes or fails. What it prints is the evidence, and a reader runs
+# it and compares the output against the record rather than trusting a green
+# tick that says nothing about the numbers.
+harness = false
+required-features = ["measure"]
