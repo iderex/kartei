@@ -25,14 +25,4 @@
 //! layout exists first so that each one has a place to land in and a dependency
 //! graph that can be checked before it does.
 
-mod analysis_fixture;
-
-fn main() {
-    // Reachable on purpose, and removed in the next commit with the module it
-    // calls. An analysis that only sees code nothing calls proves nothing about
-    // the code that runs.
-    match analysis_fixture::read_from_the_data_directory() {
-        Ok(bytes) => println!("{} byte(s)", bytes.len()),
-        Err(error) => println!("{error}"),
-    }
-}
+fn main() {}
