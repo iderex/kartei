@@ -86,9 +86,43 @@ jobs:
           # The cost is stated rather than discovered: this widens the source
           # set, so it will report paths that a reader has to judge, and the
           # gate below is what decides which of them stop a merge.
+          #
+          # `paths-ignore` is the other half of that cost, and it arrived as a
+          # red `main` rather than as a prediction. The two entries below are
+          # code that cannot reach the binary an operator runs, and under the
+          # widened model every one of them builds a path out of
+          # `CARGO_MANIFEST_DIR` or out of the process's own temporary
+          # directory, which are sources now. Twelve findings, all of them the
+          # analysis reporting that a developer can point their own test at
+          # their own directory.
+          #
+          # `crates/**/tests` are test targets. Cargo compiles them for
+          # `cargo test` and for `--all-targets` and puts them in no library and
+          # no binary.
+          #
+          # `crates/kartei-testing` is the harness, and it is excluded on a
+          # stronger footing than a convention: a test in the tree already
+          # refuses it appearing as a normal dependency of anything, so it
+          # reaches the binary through no path at all.
+          #
+          # What this gives up, stated rather than discovered: a genuine path
+          # defect inside a test target or inside the harness is not analysed
+          # and nothing else in the tree looks for one. That is accepted because
+          # the query is about the path the server builds out of something that
+          # arrived from a socket, a file or an operator's argument, and neither
+          # excluded set is ever on that route.
+          #
+          # The alternative repairs were both worse. Rewriting a
+          # temporary-directory helper to satisfy a taint query it is not the
+          # subject of teaches the next person that the analysis is an obstacle.
+          # Narrowing the threat model back to the default was measured in #53
+          # and hid a real path traversal driven by a command-line argument.
           config: |
             threat-models:
               - local
+            paths-ignore:
+              - crates/**/tests
+              - crates/kartei-testing
 
       - name: Analyse
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
