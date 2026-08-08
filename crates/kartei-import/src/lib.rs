@@ -22,4 +22,8 @@
 //! be run against a fixture without a database or a replicated document
 //! anywhere in the test.
 //!
-//! The importers themselves land with the migration milestone.
+//! The importers themselves land with the migration milestone. [`csv`] is the
+//! first of them, and it is also the building block the others read their
+//! tables through, so it lands ahead of the exports that will use it.
+
+pub mod csv;
