@@ -49,8 +49,12 @@ one is.
 Why the server is written in the language it is, why the engine is called
 natively rather than through a binding, and what was rejected, are in
 [0001-server-means.md](decisions/0001-server-means.md). Which engine is chosen
-is #11 and #12. Neither has a record in `docs/decisions/` yet, and until one
-does, the reasoning for that choice is on the tracker and not in this tree.
+is #11 and #12, and they have one record between them.
+[0002-sync-engine.md](decisions/0002-sync-engine.md) is #11's: it measures the
+candidates against what this product needs and deliberately picks none of them,
+so that the pick is a reading of a measurement rather than the measurement being
+written backwards from a preference. The pick is #12 and has no record yet, so
+that half of the reasoning is on the tracker and not in this tree.
 
 The browser client is the one place where the means is forced rather than
 chosen, and the force is held to the client and stops there. It is outside
@@ -145,3 +149,11 @@ Every path it names has to resolve in the tree, which is
 A rename that leaves this document pointing at nothing reds the suite rather
 than being found by a reader following a dead link. What that check does not
 reach is written in its own doc comment rather than here.
+
+Nothing reads a sentence in this note about what the tree does not hold. Two are
+here: that the pick between the engines has no record yet, and that the storage
+ceiling has none. Neither names a path, so there is nothing for a path check to
+resolve, and what each asserts is an absence, which is the one thing a check
+built on resolving paths cannot see. Both stop being true when the record
+arrives rather than when anything changes here, and one of them already had,
+which is #104. They are read by a person and by nothing else.
