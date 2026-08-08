@@ -63,8 +63,19 @@
 //! more fields than the header has keeps the extra fields past the end of the
 //! row. A row with fewer is padded with [`Value::Empty`]. In every case the
 //! bytes survive and the flag says so, because an importer that quietly drops
-//! what it did not understand is how an import becomes data loss. What the
-//! operator is shown about those flags is #70's and is not decided here.
+//! what it did not understand is how an import becomes data loss.
+//!
+//! # The account of what happened
+//!
+//! [`Table::report`] is that account, in the shared shape every importer owes,
+//! and [`crate::report`] is where the three states it separates are argued.
+//! Two of them are produced here from things this module already knew and did
+//! not say out loud. A [`Flag`] becomes a degradation, because a cell kept as
+//! written under a column that is not its type is a cell that arrived and lost
+//! its type. A guess this importer declines to make becomes an unsupported
+//! construct, because "your column of thousands-separated numbers came in as
+//! text" and "your column came in as text" are different sentences and only the
+//! first one can be acted on.
 //!
 //! # Bounds
 //!
@@ -88,6 +99,8 @@
 
 use std::fmt;
 use std::io::Read;
+
+use crate::report::{Counts, Entry, Report, State};
 
 /// The bounds an import is held to.
 ///
@@ -350,6 +363,15 @@ pub struct Table {
     pub rows: Vec<Vec<Value>>,
     /// Everything that did not fit.
     pub flags: Vec<Flag>,
+    /// What this import did to what it saw.
+    ///
+    /// It travels with the table rather than being printed and forgotten, so
+    /// whatever stores the table can store the account of how it got there
+    /// beside it. Where it says the same thing as [`Table::flags`] it says it
+    /// counted, grouped and in the vocabulary every importer shares; the flags
+    /// stay because they carry the value as written and the report deliberately
+    /// carries only the position.
+    pub report: Report,
 }
 
 /// One field, and whether it was written in quotes.
@@ -438,18 +460,27 @@ impl Source {
         })
     }
 
+    /// The fields one column actually holds a value in.
+    ///
+    /// An empty unquoted field is not evidence about anything, so it is left
+    /// out here rather than in each caller. Inference and the declined-guess
+    /// report have to agree about which fields they are looking at, and the way
+    /// they agree is by asking the same question.
+    fn present_in(&self, column: usize) -> Vec<&Field> {
+        self.records
+            .iter()
+            .filter_map(|r| r.get(column))
+            .filter(|f| !(f.text.is_empty() && !f.quoted))
+            .collect()
+    }
+
     /// What was detected, what each column looks like, and what is being asked.
     #[must_use]
     pub fn survey(&self) -> Survey {
         let columns = (0..self.header.len())
             .map(|i| {
                 let name = self.header[i].text.clone();
-                let present: Vec<&Field> = self
-                    .records
-                    .iter()
-                    .filter_map(|r| r.get(i))
-                    .filter(|f| !(f.text.is_empty() && !f.quoted))
-                    .collect();
+                let present = self.present_in(i);
 
                 let (kind, question) = infer(&present);
                 Column {
@@ -535,12 +566,231 @@ impl Source {
             rows.push(row);
         }
 
+        let report = self.report_on(plan, &rows, &flags);
+
         Ok(Table {
             columns: plan.columns.clone(),
             rows,
             flags,
+            report,
         })
     }
+
+    /// The account of one import, built from what it produced.
+    ///
+    /// Derived rather than accumulated as the import runs, so there is no way
+    /// for the table and the report to describe two different imports. The cost
+    /// is one more pass over the flags, which is bounded by the rows that were
+    /// already read.
+    fn report_on(&self, plan: &Plan, rows: &[Vec<Value>], flags: &[Flag]) -> Report {
+        let mut report = Report::new(
+            "csv",
+            Counts {
+                columns: plan.columns.len(),
+                rows: rows.len(),
+                cells: rows.iter().map(Vec::len).sum(),
+            },
+        );
+
+        // What a delimited file cannot carry at all. Constant for this format
+        // rather than read off this file, and that is the honest form: the
+        // question a person arrives with is what happened to their formulas,
+        // and the answer is about the format they exported through rather than
+        // about their data.
+        report.add(Entry::whole(
+            State::NotInSource,
+            "formula",
+            "a delimited file carries the computed value of a cell and never the \
+             expression behind it, so no formula reached this importer",
+        ));
+        report.add(Entry::whole(
+            State::NotInSource,
+            "cell formatting",
+            "colour, font, width and number formatting are not written to a \
+             delimited file",
+        ));
+
+        // A guess this importer declines to make, per column. The column came
+        // in as text either way; naming the construct is the difference between
+        // a person knowing why and having to work it out from the data.
+        for (c, column) in plan.columns.iter().enumerate() {
+            if column.kind != ColumnType::Text {
+                continue;
+            }
+            let Some((construct, detail)) = declined(&self.present_in(c)) else {
+                continue;
+            };
+            report.add(Entry::at(
+                State::NotSupported,
+                construct,
+                detail,
+                vec![format!("column {c}, {}", column.name)],
+            ));
+        }
+
+        for (reason, construct, detail) in [
+            (
+                FlagReason::NotOfColumnType,
+                "value outside its column's type",
+                "kept exactly as written, as an unparsed cell, rather than \
+                 coerced or dropped",
+            ),
+            (
+                FlagReason::ShortRow,
+                "row shorter than the header",
+                "padded to the width of the columns with cells that carry \
+                 nothing, which is not the same as cells that carry an empty \
+                 string",
+            ),
+            (
+                FlagReason::LongRow,
+                "row longer than the header",
+                "the fields past the last column were kept at the end of the \
+                 row, outside any column, rather than discarded",
+            ),
+        ] {
+            let sites: Vec<String> = flags
+                .iter()
+                .filter(|f| f.reason == reason)
+                .map(|f| match f.column {
+                    Some(c) => format!("row {}, column {c}", f.row),
+                    None => format!("row {}", f.row),
+                })
+                .collect();
+            report.add(Entry::at(State::Degraded, construct, detail, sites));
+        }
+
+        report
+    }
+}
+
+/// A guess this importer refuses to make about a column that came in as text.
+///
+/// Only the two the module documents as deliberate refusals. A column that is
+/// text because it holds text is not a finding, and reporting it would bury the
+/// two cases that are.
+///
+/// Both tests are unanimous over the fields that carry a value: one odd value
+/// in a column of grouped numbers means the column is not a column of grouped
+/// numbers, and claiming otherwise would put a construct in the report that the
+/// file does not have.
+fn declined(present: &[&Field]) -> Option<(&'static str, &'static str)> {
+    if present.is_empty() {
+        return None;
+    }
+
+    let grouped = present
+        .iter()
+        .any(|f| is_grouped_number(&f.text) && !is_number(&f.text));
+    if grouped
+        && present
+            .iter()
+            .all(|f| is_number(&f.text) || is_grouped_number(&f.text))
+    {
+        return Some((
+            "thousands separator",
+            "the column reads as numbers written with a group separator, which is \
+             locale-dependent and is not in the file, so it was imported as text \
+             with every character intact",
+        ));
+    }
+
+    let two_digit = present.iter().any(|f| is_two_digit_year_date(&f.text));
+    if two_digit
+        && present
+            .iter()
+            .all(|f| is_two_digit_year_date(&f.text) || date_shape(&f.text).is_some())
+    {
+        return Some((
+            "two-digit year",
+            "the column reads as dates whose year is two digits, and the century \
+             would have to come from a convention rather than from the file, so it \
+             was imported as text with every character intact",
+        ));
+    }
+
+    None
+}
+
+/// The characters a thousands separator is written with.
+///
+/// The space is the ASCII one. A file using a non-breaking space is not read as
+/// grouped here, and that is a gap rather than a decision: it means such a
+/// column is reported as nothing rather than as this construct.
+const GROUPING: [char; 3] = [',', '.', ' '];
+
+/// A number written with a group separator, which [`is_number`] refuses.
+///
+/// One character does the grouping and a different one may then mark the
+/// decimal, because no notation uses one character for both. Every group after
+/// the first is exactly three digits, which is what makes this a separator
+/// rather than a decimal point with too many digits after it.
+fn is_grouped_number(text: &str) -> bool {
+    let body = text.strip_prefix('-').unwrap_or(text);
+    let body = body.strip_prefix('+').unwrap_or(body);
+    if body.is_empty() {
+        return false;
+    }
+
+    for group in GROUPING {
+        for point in GROUPING.into_iter().filter(|p| *p != group) {
+            let (whole, fraction) = match body.rsplit_once(point) {
+                Some((whole, fraction)) => (whole, Some(fraction)),
+                None => (body, None),
+            };
+
+            // No let-chain: the workspace floor in `rust-version` predates
+            // them, and the `msrv` job in the gate builds with it.
+            if let Some(fraction) = fraction {
+                if fraction.is_empty() || !fraction.bytes().all(|b| b.is_ascii_digit()) {
+                    continue;
+                }
+            }
+
+            let parts: Vec<&str> = whole.split(group).collect();
+            if parts.len() < 2 {
+                continue;
+            }
+            if !parts
+                .iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            {
+                continue;
+            }
+            if parts[0].len() > 3 {
+                continue;
+            }
+            if parts[1..].iter().all(|p| p.len() == 3) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// A date whose year is two digits, which [`date_shape`] refuses.
+///
+/// The same three parts and the same separators, and the last part is two
+/// digits rather than four. Recognising it here is not the importer changing
+/// its mind about reading it; it is the importer being able to say what it
+/// declined.
+fn is_two_digit_year_date(text: &str) -> bool {
+    let Some(separator) = ['-', '/', '.'].into_iter().find(|s| text.contains(*s)) else {
+        return false;
+    };
+    let parts: Vec<&str> = text.split(separator).collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    if !parts
+        .iter()
+        .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return false;
+    }
+
+    parts[0].len() <= 2 && parts[1].len() <= 2 && parts[2].len() == 2
 }
 
 /// Turns a field into a value under a column's type.

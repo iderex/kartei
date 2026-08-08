@@ -85,6 +85,24 @@ socket rather than in the document, because a replicated document has no concept
 of a refused operation. That is #45, and it is the reason the permission model
 sits in the transport milestone at all.
 
+## What an import says it did
+
+An importer reads somebody's existing workspace, and the part of that job that
+goes wrong quietly is the part it could not carry across. So an import produces
+an account of itself rather than relying on a fidelity note in a document, which
+would describe the importer as it was when somebody last looked and would then be
+trusted anyway. The shape of that account is
+[crates/kartei-import/src/report.rs](../crates/kartei-import/src/report.rs), and
+what each state means and why they may not be collapsed is argued there rather
+than here.
+
+One thing about it belongs in this note because it is a rule about the whole
+product and not about one crate: an import that skipped nothing says so in
+words. A report that is empty because everything came across and a report that is
+empty because the importer stopped looking are otherwise the same bytes, and the
+first is worth nothing if the reader cannot tell it from the second. The same
+reasoning is why the `test` job in the gate prints what it covered.
+
 ## The ceilings
 
 One process, one machine, one data directory. There is no horizontal scale and

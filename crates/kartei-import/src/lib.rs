@@ -25,5 +25,11 @@
 //! The importers themselves land with the migration milestone. [`csv`] is the
 //! first of them, and it is also the building block the others read their
 //! tables through, so it lands ahead of the exports that will use it.
+//!
+//! [`report`] is the account every importer owes of what it did to what it saw.
+//! It is shared rather than per importer on purpose: a person comparing two
+//! imports is comparing two reports, and three states that mean the same thing
+//! in both is the whole of what makes that comparison possible.
 
 pub mod csv;
+pub mod report;
